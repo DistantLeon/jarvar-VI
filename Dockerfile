@@ -14,6 +14,9 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 
+# --- NOVO: Instala o navegador Chromium para o Web Arm ---
+RUN playwright install --with-deps chromium
+
 # Copia o código fonte do Jarvis
 COPY . .
 
