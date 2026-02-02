@@ -1,20 +1,25 @@
 # Project Requirements
 
 ## Core Dependencies (Jarvis System)
-Essas bibliotecas são essenciais para o funcionamento do orquestrador `jarvis_v3.6.py`.
+Essas bibliotecas são essenciais para o funcionamento do orquestrador `jarvis.py` (v3.7+).
 
 - **Python 3.12+**
 - **google-genai**: SDK para comunicação com o modelo Gemini 2.0 Flash.
 - **python-dotenv**: Carregamento de credenciais (`.env`).
-- **pydantic**: Validação de dados.
+- **pydantic**: Validação de dados (usado internamente pelo SDK).
 
-## Factory Mode Dependencies (Generated Apps)
-Bibliotecas recomendadas para os softwares gerados pelo Jarvis (como visto no Desafio 5).
+## Web Arm Dependencies (Navegação) [NOVO]
+Essenciais para a funcionalidade de navegação e leitura de páginas web (`skills/navegacao.py`).
 
-- **fastapi**: Framework web moderno.
-- **uvicorn**: Servidor ASGI.
-- **requests**: Para testes de integração.
-- **pytest**: Framework de testes.
+- **crawl4ai**: Framework de crawling assíncrono que converte HTML/JS em Markdown limpo.
+- **playwright**: Motor de automação de browser (usado pelo crawl4ai).
+  *Nota:* Requer instalação de binários do sistema: `playwright install chromium`.
+
+## Dynamic Skills Dependencies
+O sistema de skills nativo utiliza bibliotecas padrão do Python, mas skills criadas podem requerer pacotes extras.
+
+- **importlib**: (Stdlib) Carregamento dinâmico.
+- **inspect**: (Stdlib) Introspecção de código.
 
 ## Environment Setup
 1. Crie o arquivo `.env`:
@@ -23,7 +28,8 @@ Bibliotecas recomendadas para os softwares gerados pelo Jarvis (como visto no De
    ```
 2. Instale as dependências:
    ```bash
-   pip install google-genai python-dotenv fastapi uvicorn requests pytest
+   pip install -r requirements.txt
+   playwright install chromium
    ```
 3. Verifique o Gemini CLI:
-   Certifique-se de que o comando `gemini` está acessível no PATH.
+   Certifique-se de que o comando `gemini` está acessível no PATH para funcionamento do Brain.

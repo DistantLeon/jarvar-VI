@@ -1,46 +1,64 @@
-# PROJECT CONTEXT: JARVIS ECOSYSTEM (V3.6)
-**Date:** 2026-02-01 | **Architecture:** Orchestrator (Hand) + Intelligence (Brain-CLI)
+# PROJECT CONTEXT: JARVIS ECOSYSTEM (V3.8)
+**Date:** 2026-02-02 | **Architecture:** Orchestrator (Hand) + Intelligence (Brain-CLI) + Dynamic Skills (Meta) + Web Arm + Persistent Memory
 
 ## 1. Overview
-O projeto evoluiu para uma arquitetura de **Fábrica de Software Autônoma**.
-- **Jarvis (Hand):** Script Python (`jarvis_v3.6.py`) que atua como **Orquestrador Síncrono**. Ele não "pensa", apenas executa ordens. Possui um Loop Manual de Ferramentas sem limites de execução.
-- **Gemini CLI (Brain):** Motor de raciocínio profundo. Recebe contexto, processa e retorna comandos estruturados em **JSON** para a Mão executar.
-- **Objetivo:** Permitir fluxos de trabalho infinitos, recursivos (Cérebros chamando Cérebros) e especializados (Arquiteto -> Dev -> QA).
+O projeto evoluiu para uma arquitetura de **Fábrica de Software Autônoma com Capacidade de Auto-Expansão, Navegação Web e Memória Persistente**.
+- **Jarvis (Hand):** Script Python (`jarvis.py`) que atua como **Orquestrador Síncrono com Hot Reload**.
+- **Gemini CLI (Brain):** Motor de raciocínio profundo (Brain).
+- **Dynamic Skills:** Sistema que permite ao Jarvis criar, salvar e carregar novas ferramentas Python em tempo de execução sem reiniciar o processo.
+- **Web Arm:** Capacidade headless de navegar, renderizar JS e ler a web.
+- **Persistent Memory (Dossier):** Sistema de arquivos Markdown para retenção de longo prazo (preferências, contexto de projeto).
 
 ## 2. Directory Structure
 - `/`: Raiz do projeto.
-- `/jarvis_logs/`: Auditoria completa. Cada raciocínio gera um par `_input.txt` (Prompt) e `_output.txt` (Resposta JSON/Texto).
+- `/jarvis_logs/`: Auditoria completa do Brain (Inputs/Outputs).
+- `/memoria/`: [NOVO] Armazenamento de conhecimento persistente (Arquivos .md).
+- `/skills/`: Repositório de ferramentas dinâmicas (Navegação, Memória, etc).
+- `/web_arm_tests/`: Testes automatizados da capacidade de navegação.
 - `/venv/`: Ambiente virtual Python.
 
 ## 3. Core Components
-- `jarvis_v3.6.py` [CORE]:
-    - **Loop Manual:** Substituiu o `automatic_function_calling` do SDK para remover o limite de 10 chamadas.
-    - **Protocolo Síncrono:** Aguarda o término do processo CLI antes de agir, garantindo consistência.
-    - **JSON Parsing:** Detecta blocos `{"tool": ...}` na resposta do Brain e executa via `TOOL_MAP`.
-    - **Tools:** `escrever_arquivo` (Preferencial), `ler_arquivo`, `executar_comando_terminal`, `listar_estrutura_projeto`, `iniciar_raciocinio` (Recursivo).
+- `jarvis.py` (v3.7.0):
+    - **Hot Reloading:** Detecta criação de novas skills e recarrega a "memória" de funções do modelo preservando o histórico do chat.
+    - **Meta-Tool (`criar_skill`):** Permite que o Jarvis escreva código Python para expandir suas próprias capacidades.
+    - **Dynamic Loader:** Importa módulos da pasta `/skills` automaticamente via `importlib`.
+    - **Tools Nativas:** `escrever_arquivo`, `ler_arquivo`, `executar_comando_terminal`, `listar_estrutura_projeto`, `iniciar_raciocinio`, `criar_skill`.
+
+- `skills/navegacao.py` (Web Arm):
+    - **Lib:** `crawl4ai` (Baseada em Playwright).
+    - **Função:** `navegar_web(url, tipo_extracao)`.
+    - **Saída:** Markdown limpo e otimizado para LLMs.
+    - **Recursos:** Renderização de JavaScript, contorno de bloqueios simples, truncamento de conteúdo seguro (40k chars).
+
+- `skills/memoria.py` (Dossier):
+    - **Lib:** Standard Python (`pathlib`, `glob`).
+    - **Funções:** `memorizar(conteudo, topico)`, `consultar_memoria(topico)`, `listar_topicos()`.
+    - **Propósito:** Evitar "amnésia" entre sessões salvando fatos em `/memoria`.
 
 ## 4. Protocols & Standards
+- **Meta-Programming Protocol:**
+    - Se o Brain identificar uma tarefa repetitiva ou complexa que falta no arsenal, ele deve instruir a criação de uma Skill.
 - **Brain-Hand Protocol:**
-    - O Brain **NUNCA** executa comandos shell (ex: `echo ... > file`) para criar arquivos complexos.
-    - O Brain **SEMPRE** envia um JSON: `{"tool": "escrever_arquivo", "args": {...}}`.
-    - O Hand executa cegamente.
-- **Factory Mode (Methodology):**
-    - **Phase 1 (Architect):** Gera Specs/Docs em Markdown.
-    - **Phase 2 (Coder):** Lê Specs e gera Código.
-    - **Phase 3 (QA):** Lê Código e gera Testes.
+    - Brain pensa -> JSON -> Hand executa.
+- **Web Research Protocol:**
+    - Para acessar URLs: Use `navegar_web`.
+    - O retorno é Markdown. O Brain deve ler o Markdown e sintetizar a resposta.
+- **Memory Protocol:**
+    - Início de Sessão: Consultar `memoria/user_preferences.md` (se existir).
+    - Fato Novo: Usar `memorizar` para salvar decisões arquiteturais ou preferências.
+    - Dúvida: Usar `consultar_memoria` antes de alucinar ou perguntar novamente.
 
 ## 5. Data Flow (The Loop)
 1. **User Input** -> Jarvis (Hand).
-2. **Hand** -> Repassa integralmente para `iniciar_raciocinio` (Brain).
-3. **Brain** -> Pensa -> Retorna JSON `{"tool": "..."}`.
-4. **Hand** -> Detecta JSON -> Executa Tool -> Envia resultado de volta ao Brain.
-5. **Repeat** -> O ciclo continua indefinidamente até o Brain decidir parar e responder texto ao usuário.
+2. **Hand** -> Repassa para `iniciar_raciocinio` (Brain) OU executa ferramenta direta (Ex: `navegar_web`).
+3. **Brain** -> Retorna estratégia, conteúdo processado ou pedido de nova skill.
+4. **Hand** -> Executa e retorna feedback.
 
 ## 6. Dependencies
-- `google-genai`: SDK v1.0+ (Client).
-- `subprocess`: Ponte para o CLI.
+- **Core:** `google-genai`, `python-dotenv`.
+- **Web Arm:** `crawl4ai`, `playwright` (Requires `playwright install chromium`).
 - **Runtime:** Python 3.12+.
 
 ## 7. Security
 - **Sandboxing:** `validate_path` impede acesso fora da raiz.
-- **Hardening:** Prompt do Brain instruído a não usar shell tricks frágeis.
+- **Web:** `navegar_web` roda em contexto seguro (Chromium sandbox) e trunca saídas gigantes.
