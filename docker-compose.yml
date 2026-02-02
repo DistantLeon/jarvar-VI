@@ -1,0 +1,19 @@
+services:
+  jarvis-core:
+    build: .
+    container_name: jarvar_vi
+    # CRÍTICO: Permite interatividade (input do Python)
+    stdin_open: true 
+    tty: true
+    
+    # Mapeia variáveis de ambiente do seu .env local
+    env_file:
+      - .env
+    
+    # Persistência: Garante que logs e arquivos criados não sumam ao reiniciar
+    volumes:
+      - ./jarvis_logs:/app/jarvis_logs
+      - ./workspace_output:/app/workspace  # Sugestão: pasta dedicada para outputs
+      
+    # Segurança: Impede que o container ganhe privilégios de root no host
+    privileged: false

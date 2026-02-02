@@ -1,0 +1,20 @@
+# Ambientes Virtuais e Dependências
+venv/
+env/
+__pycache__/
+.pytest_cache/
+
+# Git
+.git/
+
+# Configurações Sensíveis
+.env
+
+# Logs e Arquivos Gerados pelo Jarvis
+jarvis_logs/
+workspace_output/
+*.log
+
+# Sistema Operacional (Windows/Mac)
+Thumbs.db
+.DS_Store
