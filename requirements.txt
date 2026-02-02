@@ -7,3 +7,6 @@ requests
 pytest
 crawl4ai
 playwright
+Pillow
+yt-dlp
+beautifulsoup4

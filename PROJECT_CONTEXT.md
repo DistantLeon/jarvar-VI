@@ -1,8 +1,8 @@
-# PROJECT CONTEXT: JARVIS ECOSYSTEM (V3.8)
-**Date:** 2026-02-02 | **Architecture:** Orchestrator (Hand) + Intelligence (Brain-CLI) + Dynamic Skills (Meta) + Web Arm + Persistent Memory
+# PROJECT CONTEXT: JARVIS ECOSYSTEM (V3.9)
+**Date:** 2026-02-02 | **Architecture:** Orchestrator (Hand) + Intelligence (Brain-CLI) + Dynamic Skills (Meta) + Web Arm + Media Suite + Persistent Memory
 
 ## 1. Overview
-O projeto evoluiu para uma arquitetura de **Fábrica de Software Autônoma com Capacidade de Auto-Expansão, Navegação Web e Memória Persistente**.
+O projeto evoluiu para uma arquitetura de **Fábrica de Software Autônoma com Capacidade de Auto-Expansão, Navegação Web, Processamento Multimídia e Memória Persistente**.
 - **Jarvis (Hand):** Script Python (`jarvis.py`) que atua como **Orquestrador Síncrono com Hot Reload**.
 - **Gemini CLI (Brain):** Motor de raciocínio profundo (Brain).
 - **Dynamic Skills:** Sistema que permite ao Jarvis criar, salvar e carregar novas ferramentas Python em tempo de execução sem reiniciar o processo.
@@ -18,7 +18,7 @@ O projeto evoluiu para uma arquitetura de **Fábrica de Software Autônoma com C
 - `/venv/`: Ambiente virtual Python.
 
 ## 3. Core Components
-- `jarvis.py` (v3.7.0):
+- `jarvis.py` (v3.9.0):
     - **Hot Reloading:** Detecta criação de novas skills e recarrega a "memória" de funções do modelo preservando o histórico do chat.
     - **Meta-Tool (`criar_skill`):** Permite que o Jarvis escreva código Python para expandir suas próprias capacidades.
     - **Dynamic Loader:** Importa módulos da pasta `/skills` automaticamente via `importlib`.
@@ -34,6 +34,20 @@ O projeto evoluiu para uma arquitetura de **Fábrica de Software Autônoma com C
     - **Lib:** Standard Python (`pathlib`, `glob`).
     - **Funções:** `memorizar(conteudo, topico)`, `consultar_memoria(topico)`, `listar_topicos()`.
     - **Propósito:** Evitar "amnésia" entre sessões salvando fatos em `/memoria`.
+
+- `skills/pesquisa.py` (Search Engine):
+    - **Lib:** `requests`, `bs4` (Scraping Manual Robust).
+    - **Função:** `pesquisar_web(query)`.
+    - **Estratégia:** Rotação de user-agents e parsing direto do HTML do DuckDuckGo. Fallback para Google.
+
+- `skills/youtube.py` (Video Intel):
+    - **Lib:** `yt-dlp`.
+    - **Função:** `ler_transcricao_youtube(url)`.
+    - **Recursos:** Baixa legendas (PT/EN) sem baixar vídeo. Suporta auto-subs.
+
+- `skills/imagem.py` (Media Ops):
+    - **Lib:** `Pillow`.
+    - **Função:** `converter_imagem(path, fmt, scale)`.
 
 ## 4. Protocols & Standards
 - **Meta-Programming Protocol:**
@@ -55,8 +69,9 @@ O projeto evoluiu para uma arquitetura de **Fábrica de Software Autônoma com C
 4. **Hand** -> Executa e retorna feedback.
 
 ## 6. Dependencies
-- **Core:** `google-genai`, `python-dotenv`.
+- **Core:** `google-genai`, `python-dotenv`, `requests`, `beautifulsoup4`.
 - **Web Arm:** `crawl4ai`, `playwright` (Requires `playwright install chromium`).
+- **Media:** `yt-dlp` (Video), `Pillow` (Image).
 - **Runtime:** Python 3.12+.
 
 ## 7. Security
