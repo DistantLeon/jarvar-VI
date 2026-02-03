@@ -73,7 +73,7 @@ def carregar_ferramentas_dinamicas() -> List[Callable]:
             # Ignora arquivos privados e utilitários que não expõem tools
             continue
         
-        module_name = py_file.stem
+        module_name = f"skills.{py_file.stem}"
         try:
             # Força reload se o módulo já estiver carregado (importante para hot reload)
             if module_name in sys.modules:
@@ -200,6 +200,28 @@ if __name__ == "__main__":
                     if fn_name in TOOL_MAP:
                         try:
                             result = TOOL_MAP[fn_name](**fn_args)
+                            
+                            # --- SHORT-CIRCUIT: Execução Direta do Cérebro ---
+                            if fn_name == "iniciar_raciocinio" and isinstance(result, str):
+                                from skills.schemas import extract_json_from_text
+                                cmd = extract_json_from_text(result)
+                                if cmd:
+                                    print(f"⚡ [SHORT-CIRCUIT] Cérebro ordenou: {cmd.tool}")
+                                    if cmd.tool in TOOL_MAP:
+                                        try:
+                                            # Executa a ferramenta solicitada pelo Cérebro
+                                            inner_res = TOOL_MAP[cmd.tool](**cmd.args)
+                                            result += f"\n\n✅ EXECUÇÃO AUTOMÁTICA ({cmd.tool}):\n{inner_res}"
+                                            
+                                            # Verifica se a skill interna pede reload
+                                            if cmd.tool == "criar_skill" and "RECARREGAMENTO_SOLICITADO" in str(inner_res):
+                                                reload_needed = True
+                                        except Exception as inner_e:
+                                            result += f"\n\n❌ ERRO NA EXECUÇÃO AUTOMÁTICA: {inner_e}"
+                                    else:
+                                        result += f"\n\n⚠️ Cérebro tentou executar '{cmd.tool}' (não encontrada)."
+                            # -------------------------------------------------
+
                             # Verifica flag de recarregamento
                             if fn_name == "criar_skill" and "RECARREGAMENTO_SOLICITADO" in str(result):
                                 reload_needed = True
@@ -228,7 +250,16 @@ if __name__ == "__main__":
                 TOOL_MAP = {func.__name__: func for func in TODAS_FERRAMENTAS}
                 
                 # Preserva histórico e recria sessão
-                historico_atual = chat.history
+                historico_atual = []
+                try:
+                    # Tenta recuperar o histórico (compatibilidade varia entre versões do SDK)
+                    if hasattr(chat, 'history'):
+                        historico_atual = chat.history
+                    elif hasattr(chat, '_curated_history'):
+                        historico_atual = chat._curated_history
+                except Exception as e:
+                    print(f"⚠️ Não foi possível preservar o histórico: {e}")
+
                 chat = iniciar_sessao_chat(TODAS_FERRAMENTAS, history=historico_atual)
                 print("🚀 Sistema atualizado com sucesso. Próxima interação terá novas skills.")
 

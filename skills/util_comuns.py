@@ -3,6 +3,7 @@ import sys
 import threading
 from pathlib import Path
 from typing import Dict, Optional, Any
+from skills.schemas import extract_json_from_text, BrainCommand
 
 # --- CONFIGURAÇÃO ---
 # Recriamos as constantes aqui para serem usadas pelos módulos
