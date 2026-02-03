@@ -20,8 +20,15 @@ RUN playwright install --with-deps chromium
 # Copia o código fonte do Jarvis
 COPY . .
 
-# Cria a pasta de logs para garantir permissões
-RUN mkdir -p jarvis_logs
+# Cria diretórios graváveis
+RUN mkdir -p jarvis_logs workspace_output memoria
+
+# --- SEGURANÇA: Usuário Não-Root ---
+RUN useradd -m -u 1000 jarvis && \
+    chown -R jarvis:jarvis jarvis_logs workspace_output memoria
+
+# Muda para o usuário jarvis
+USER jarvis
 
 # Comando padrão de execução
 CMD ["python", "jarvis.py"]
