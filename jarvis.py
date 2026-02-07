@@ -1,81 +1,94 @@
 import sys
 import os
 import atexit
-import threading
 import importlib.util
 import inspect
+import re
+import json
 from datetime import datetime, timedelta
-from typing import List, Dict, Optional, Callable, Any
+from typing import List, Dict, Optional, Callable, Any, Tuple
 from dotenv import load_dotenv
-from google import genai
-from google.genai import types
 
-# Importações Refatoradas
 from skills.util_comuns import (
-    LOG_DIR, 
-    SKILLS_DIR, 
+    LOG_DIR,
+    SKILLS_DIR,
     cleanup_processos
 )
+from skills.cerebro import gemini_cli_raw
+from skills.codex_cli import executar_codex_cli, executar_codex_cli_raw
 
-# --- CONFIGURAÇÃO DE VERSÃO ---
-VERSION = "3.9.0" # Bumped for Modular Refactoring
-UPDATE_DATE = "2026-02-02"
+# --- CONFIGURACAO DE VERSAO ---
+VERSION = "0.4.1"
+UPDATE_DATE = "2026-02-07"
 
 # --- SETUP INICIAL ---
 load_dotenv()
-# logging.basicConfig removido pois não estava sendo muito usado, prints diretos são preferidos no CLI
-# Se necessário, reativar com config centralizada.
 
 # --- HARDENING: ENCODING ---
-if sys.stdout and sys.stdout.encoding != 'utf-8':
-    try: sys.stdout.reconfigure(encoding='utf-8')
-    except: pass
-if sys.stderr and sys.stderr.encoding != 'utf-8':
-    try: sys.stderr.reconfigure(encoding='utf-8')
-    except: pass
+if sys.stdout and sys.stdout.encoding != "utf-8":
+    try:
+        sys.stdout.reconfigure(encoding="utf-8")
+    except:
+        pass
+if sys.stderr and sys.stderr.encoding != "utf-8":
+    try:
+        sys.stderr.reconfigure(encoding="utf-8")
+    except:
+        pass
 
-# --- CONFIGURAÇÃO ---
-MODELO_ESCOLHIDO = os.getenv("GEMINI_MODEL", "gemini-2.0-flash")
-API_KEY = os.getenv("GEMINI_API_KEY")
+# --- CONFIGURACAO ---
+ROUTER_MODE = os.getenv("ROUTER_MODE", "rules").lower()
+ROUTER_MODE = ROUTER_MODE if ROUTER_MODE in {"rules", "llm", "hybrid"} else "rules"
+HISTORY_TURNS = int(os.getenv("HISTORY_TURNS", "8"))
+HISTORY_MAX_CHARS = int(os.getenv("HISTORY_MAX_CHARS", "2000"))
+SUMMARY_MAX_CHARS = int(os.getenv("SUMMARY_MAX_CHARS", "4000"))
+CODEX_SANDBOX = os.getenv("CODEX_SANDBOX", "workspace-write")
+CODEX_TIMEOUT = int(os.getenv("CODEX_TIMEOUT", "900"))
+CODEX_MODEL = os.getenv("CODEX_MODEL", "")
+SLASH_ROUTE = os.getenv("SLASH_ROUTE", "auto").lower()
+SLASH_ROUTE = SLASH_ROUTE if SLASH_ROUTE in {"auto", "gemini", "codex"} else "auto"
 
-if not API_KEY:
-    sys.exit("❌ ERRO CRÍTICO: Variável GEMINI_API_KEY não encontrada no .env")
+SKILLS_ALLOWLIST = {
+    s.strip() for s in os.getenv(
+        "SKILLS_ALLOWLIST",
+        "sistema,memoria,cerebro,codex_cli"
+    ).split(",") if s.strip()
+}
 
-try:
-    client = genai.Client(api_key=API_KEY)
-except Exception as e:
-    sys.exit(f"❌ Erro ao iniciar Client: {e}")
+if not os.getenv("GEMINI_API_KEY"):
+    print("Aviso: GEMINI_API_KEY nao encontrada. Chamadas ao Gemini CLI podem falhar.")
 
-# --- GESTÃO DE DIRETÓRIOS E SKILLS ---
-def ensure_skills_dir():
-    """Garante que a pasta skills existe e é um pacote Python."""
+# --- GESTAO DE DIRETORIOS E SKILLS ---
+def ensure_skills_dir() -> None:
+    """Garante que a pasta skills existe e e um pacote Python."""
     if not SKILLS_DIR.exists():
         SKILLS_DIR.mkdir(parents=True)
-        print("📁 Diretório 'skills' criado.")
-    
+        print("Diretorio 'skills' criado.")
+
     init_file = SKILLS_DIR / "__init__.py"
     if not init_file.exists():
         init_file.touch()
 
+
 def carregar_ferramentas_dinamicas() -> List[Callable]:
     """
     Carrega ferramentas dinamicamente da pasta skills/.
-    Critérios: Funções com docstrings e Type Hints.
-    Agora inclui também as ferramentas de sistema (sistema.py, cerebro.py).
+    Critérios: funcoes com docstrings e type hints.
+    Aplica allowlist: apenas infra (sistema, memoria, cerebro, codex_cli).
     """
     ensure_skills_dir()
-    dynamic_tools = []
-    
-    print(f"🔍 Buscando skills em {SKILLS_DIR.resolve()}...")
-    
+    dynamic_tools: List[Callable] = []
+
+    print(f"Buscando skills em {SKILLS_DIR.resolve()} (allowlist: {sorted(SKILLS_ALLOWLIST)})")
+
     for py_file in SKILLS_DIR.glob("*.py"):
-        if py_file.name.startswith("_") or py_file.name == "util_comuns.py": 
-            # Ignora arquivos privados e utilitários que não expõem tools
+        if py_file.name.startswith("_") or py_file.name == "util_comuns.py":
             continue
-        
+        if py_file.stem not in SKILLS_ALLOWLIST:
+            continue
+
         module_name = f"skills.{py_file.stem}"
         try:
-            # Força reload se o módulo já estiver carregado (importante para hot reload)
             if module_name in sys.modules:
                 mod = importlib.reload(sys.modules[module_name])
             else:
@@ -86,23 +99,55 @@ def carregar_ferramentas_dinamicas() -> List[Callable]:
                     spec.loader.exec_module(mod)
                 else:
                     continue
-                
-            # Introspecção para encontrar funções válidas
+
             for name, func in inspect.getmembers(mod, inspect.isfunction):
-                if func.__module__ == module_name: # Apenas funções definidas no arquivo
-                    # Critério para ser uma Tool: Ter Docstring e Annotations
+                if func.__module__ == module_name:
                     if func.__doc__ and func.__annotations__:
                         dynamic_tools.append(func)
-                        print(f"   + Skill carregada: {name} ({module_name})")
+                        print(f"  + Skill carregada: {name} ({module_name})")
         except Exception as e:
-            print(f"   ⚠️ Falha ao carregar {py_file.name}: {e}")
-            
+            print(f"  Falha ao carregar {py_file.name}: {e}")
+
     return dynamic_tools
+
+
+def _parse_direct_tool_call(msg: str) -> Optional[tuple[str, Dict[str, Any]]]:
+    """
+    Detecta pedidos diretos do tipo "Use a skill X ..." para executar localmente.
+    """
+    if not msg:
+        return None
+    pattern = (
+        r"(?i)\b(use a skill|use the skill|use a tool|use a ferramenta|"
+        r"use a habilidade|use o skill|use a skill)\s+([a-zA-Z0-9_]+)"
+    )
+    match = re.search(pattern, msg)
+    if not match:
+        return None
+    tool_name = match.group(2)
+    args: Dict[str, Any] = {}
+    args_match = re.search(r"(?i)\bargs?\b", msg)
+    if args_match:
+        start = msg.find("{", args_match.end())
+        end = msg.rfind("}")
+        if start != -1 and end != -1 and end > start:
+            try:
+                args = json.loads(msg[start:end + 1])
+            except json.JSONDecodeError:
+                args = {}
+
+    if not args:
+        texto_match = re.search(r"(?i)\b(texto|text)\s*['\"]([^'\"]+)['\"]", msg)
+        if texto_match:
+            args["texto"] = texto_match.group(2)
+    return tool_name, args
+
 
 # --- CLEANUP ---
 atexit.register(cleanup_processos)
 
-def rotacionar_logs(dias_retencao: int = 3):
+
+def rotacionar_logs(dias_retencao: int = 3) -> None:
     agora = datetime.now()
     removidos = 0
     for log_file in LOG_DIR.glob("*.txt"):
@@ -111,161 +156,239 @@ def rotacionar_logs(dias_retencao: int = 3):
             if agora - mtime > timedelta(days=dias_retencao):
                 log_file.unlink()
                 removidos += 1
-        except: pass
-    if removidos: print(f"🧹 {removidos} logs antigos removidos.")
+        except:
+            pass
+    if removidos:
+        print(f"{removidos} logs antigos removidos.")
 
-# --- SEGURANÇA ---
-def forcar_workdir_seguro():
+
+# --- SEGURANCA ---
+def forcar_workdir_seguro() -> None:
     script_path = os.path.abspath(__file__)
     script_dir = os.path.dirname(script_path)
     os.chdir(script_dir)
     if r"windows\system32" in script_dir.lower():
-        sys.exit("❌ CRÍTICO: Execução bloqueada em System32.")
+        sys.exit("CRITICO: execucao bloqueada em System32.")
+
 
 forcar_workdir_seguro()
 
-# --- CHAT LIFECYCLE ---
-def iniciar_sessao_chat(ferramentas: List[Callable], history: List = []):
-    """
-    Cria ou recria a sessão de chat com as ferramentas especificadas.
-    Preserva o histórico se fornecido.
-    """
+
+# --- ROTEADOR ---
+EXEC_KEYWORDS = [
+    "implementar", "codar", "corrigir", "bug", "teste", "testes",
+    "rodar", "executar", "build", "deploy", "refator",
+    "arquivo", "editar", "modificar", "patch", "diff", "commit",
+    "git", "pip", "npm", "docker", "pytest", "unit test", "stacktrace"
+]
+
+FILE_EXT_RE = re.compile(r"\b[\w\-/\\\\]+\.(py|js|ts|md|yml|yaml|json|toml|txt|ini|cfg)\b", re.IGNORECASE)
+
+
+def _looks_like_execution(msg: str) -> bool:
+    text = msg.lower()
+    if "```" in text:
+        return True
+    if any(k in text for k in EXEC_KEYWORDS):
+        return True
+    if re.search(r"\b(run|execute|rodar|exec|compilar)\b", text):
+        return True
+    if FILE_EXT_RE.search(text):
+        return True
+    return False
+
+
+def _route_rules(msg: str) -> Optional[str]:
+    if _looks_like_execution(msg):
+        return "codex"
+    return None
+
+
+def _route_llm(msg: str) -> Optional[str]:
+    prompt = (
+        "Classifique a mensagem do usuario como GEMINI (pensar) ou CODEX (executar). "
+        "Responda APENAS com GEMINI ou CODEX.\n\n"
+        f"MENSAGEM:\n{msg}\n"
+    )
     try:
-        return client.chats.create(
-            model=MODELO_ESCOLHIDO,
-            history=history,
-            config={
-                'tools': ferramentas,
-                'automatic_function_calling': {'disable': True}, 
-                'system_instruction': f"""
-# SYSTEM ROLE: JARVIS HAND (The Executive Interface)
-You are the interface between the User and the "Brain" (Deep Logic Core).
-You have full access to the OS and a suite of Python Tools (Skills).
+        output = gemini_cli_raw(prompt)
+    except Exception:
+        return None
+    if not output:
+        return None
+    lowered = output.strip().lower()
+    if lowered.startswith("erro") or "falha" in lowered:
+        return None
+    upper = output.strip().upper()
+    if "CODEX" in upper:
+        return "codex"
+    if "GEMINI" in upper:
+        return "gemini"
+    return None
 
-# CORE PROTOCOL
-1. **TRIVIAL TASKS:** If the user says "Hi", "Thanks", or asks a simple question about *current* context that you know, answer directly.
-2. **COMPLEX TASKS:** If the user asks for research, coding, analysis, or multi-step actions -> **DELEGATE TO BRAIN**.
-   - Use `iniciar_raciocinio(query, context_level="medium")`.
-3. **TOOL EXECUTION:** 
-   - When the Brain returns a JSON command (e.g., `{{'tool': 'navegar_web', ...}}`), **YOU MUST EXECUTE IT**.
-   - Do not describe what you will do. JUST DO IT.
-4. **MEMORY:**
-   - Check `/memoria/user_preferences.md` at start.
-   - Save important facts with `memorizar`.
 
-# DYNAMIC SKILLS
-- You possess tools loaded from `/skills`.
-- If the Brain sends a JSON to create a new skill, run `criar_skill` immediately.
-"""
-            }
-        )
-    except Exception as e:
-        sys.exit(f"❌ Falha ao iniciar chat: {e}")
+def escolher_rota(msg: str) -> str:
+    rule_choice = _route_rules(msg)
+    if ROUTER_MODE == "rules":
+        return rule_choice or "gemini"
+    if ROUTER_MODE == "llm":
+        llm_choice = _route_llm(msg)
+        return llm_choice or rule_choice or "gemini"
+    if ROUTER_MODE == "hybrid":
+        if rule_choice:
+            return rule_choice
+        llm_choice = _route_llm(msg)
+        return llm_choice or "gemini"
+    return rule_choice or "gemini"
 
-# --- BOOTSTRAP (GLOBAL SCOPE) ---
+
+# --- HISTORICO E CONTEXTO ---
+def _trim_text(text: str, max_chars: int) -> str:
+    if len(text) <= max_chars:
+        return text
+    return f"{text[:max_chars]}\n[...TRUNCADO...]"
+
+
+def _merge_summary(summary: str, overflow: List[Dict[str, str]]) -> str:
+    lines = []
+    if summary:
+        lines.append(summary)
+    for item in overflow:
+        role = item.get("role", "unknown").upper()
+        content = item.get("content", "").strip()
+        if content:
+            lines.append(f"{role}: {content}")
+    combined = "\n".join(lines)
+    if len(combined) > SUMMARY_MAX_CHARS:
+        combined = combined[-SUMMARY_MAX_CHARS:]
+    return combined
+
+
+def _rollup_history(history: List[Dict[str, str]], summary: str) -> Tuple[List[Dict[str, str]], str]:
+    max_items = HISTORY_TURNS * 2
+    if len(history) <= max_items:
+        return history, summary
+    overflow = history[:-max_items]
+    summary = _merge_summary(summary, overflow)
+    return history[-max_items:], summary
+
+
+def _format_history(history: List[Dict[str, str]]) -> str:
+    lines = []
+    for item in history:
+        role = item.get("role", "unknown").upper()
+        content = item.get("content", "")
+        lines.append(f"{role}: {content}")
+    return "\n".join(lines)
+
+
+def _build_context(history: List[Dict[str, str]], summary: str) -> str:
+    parts = []
+    if summary:
+        parts.append(f"RESUMO:\n{summary}")
+    if history:
+        parts.append(f"ULTIMOS TURNOS:\n{_format_history(history)}")
+    return "\n\n".join(parts)
+
+
+def _build_gemini_prompt(msg: str, history: List[Dict[str, str]], summary: str) -> str:
+    context = _build_context(history, summary)
+    if context:
+        return f"{context}\n\nUSUARIO:\n{msg}"
+    return msg
+
+
+def _extract_codex_final(report: str) -> str:
+    marker = "FINAL MESSAGE:"
+    if marker not in report:
+        return report
+    tail = report.split(marker, 1)[1]
+    for sep in ["\n\nSTDOUT:", "\n\nSTDERR:", "\n\nLOGS:"]:
+        if sep in tail:
+            tail = tail.split(sep, 1)[0]
+    return tail.strip()
+
+
+# --- BOOTSTRAP ---
 rotacionar_logs()
-print(f"🔌 JARVIS V{VERSION} ONLINE. Logs em: {LOG_DIR.resolve()}")
+print(f"JARVIS V{VERSION} ONLINE. Logs em: {LOG_DIR.resolve()}")
 ensure_skills_dir()
 
-# Carregamento Inicial (Agora carrega TUDO de skills/, incluindo sistema e cerebro)
 TODAS_FERRAMENTAS = carregar_ferramentas_dinamicas()
 TOOL_MAP = {func.__name__: func for func in TODAS_FERRAMENTAS}
 
+if "verificar_codex_cli" in TOOL_MAP:
+    try:
+        print(TOOL_MAP["verificar_codex_cli"]())
+    except Exception as e:
+        print(f"Codex CLI check failed: {e}")
+
+
 # --- MAIN EXECUTION ---
 if __name__ == "__main__":
-    chat = iniciar_sessao_chat(TODAS_FERRAMENTAS)
+    history: List[Dict[str, str]] = []
+    summary_text = ""
 
-    # --- MAIN LOOP ---
     while True:
         try:
-            msg = input("\n👤 CMD: ")
+            msg = input("\nCMD: ")
             if msg.strip().lower() in ["exit", "sair", "quit"]:
                 break
-            
-            # Envia mensagem inicial
-            response = chat.send_message(msg)
-            
-            reload_needed = False
-            
-            # Loop de Ferramentas
-            while response.function_calls:
-                parts = []
-                print(f"🤖: [Executando {len(response.function_calls)} ferramentas...]")
-                
-                for fc in response.function_calls:
-                    fn_name = fc.name
-                    fn_args = fc.args
-                    
-                    # Execução
-                    if fn_name in TOOL_MAP:
-                        try:
-                            result = TOOL_MAP[fn_name](**fn_args)
-                            
-                            # --- SHORT-CIRCUIT: Execução Direta do Cérebro ---
-                            if fn_name == "iniciar_raciocinio" and isinstance(result, str):
-                                from skills.schemas import extract_json_from_text
-                                cmd = extract_json_from_text(result)
-                                if cmd:
-                                    print(f"⚡ [SHORT-CIRCUIT] Cérebro ordenou: {cmd.tool}")
-                                    if cmd.tool in TOOL_MAP:
-                                        try:
-                                            # Executa a ferramenta solicitada pelo Cérebro
-                                            inner_res = TOOL_MAP[cmd.tool](**cmd.args)
-                                            result += f"\n\n✅ EXECUÇÃO AUTOMÁTICA ({cmd.tool}):\n{inner_res}"
-                                            
-                                            # Verifica se a skill interna pede reload
-                                            if cmd.tool == "criar_skill" and "RECARREGAMENTO_SOLICITADO" in str(inner_res):
-                                                reload_needed = True
-                                        except Exception as inner_e:
-                                            result += f"\n\n❌ ERRO NA EXECUÇÃO AUTOMÁTICA: {inner_e}"
-                                    else:
-                                        result += f"\n\n⚠️ Cérebro tentou executar '{cmd.tool}' (não encontrada)."
-                            # -------------------------------------------------
 
-                            # Verifica flag de recarregamento
-                            if fn_name == "criar_skill" and "RECARREGAMENTO_SOLICITADO" in str(result):
-                                reload_needed = True
-                        except Exception as e:
-                            result = f"Error: {e}"
-                    else:
-                        result = f"Error: Tool '{fn_name}' not found."
-                    
-                    # Resposta da ferramenta
-                    parts.append(types.Part.from_function_response(
-                        name=fn_name,
-                        response={"result": result}
-                    ))
-                
-                # Envia resultados de volta (completa o turno atual)
-                response = chat.send_message(parts)
+            direto = _parse_direct_tool_call(msg)
+            if direto:
+                tool_name, tool_args = direto
+                if tool_name in TOOL_MAP:
+                    try:
+                        result = TOOL_MAP[tool_name](**tool_args)
+                        print(f"[BOT] {result}")
+                    except Exception as e:
+                        print(f"[ERROR] Erro ao executar {tool_name}: {e}")
+                else:
+                    print(f"[WARN] Skill {tool_name} nao encontrada.")
+                continue
 
-            # Exibe resposta final
-            if response.text:
-                print(f"🤖: {response.text}")
+            route = escolher_rota(msg)
 
-            # HOT RELOAD (Se necessário, ocorre APÓS o turno completo)
-            if reload_needed:
-                print("\n♻️  [SYSTEM] Nova skill detectada. Recarregando Matrix...")
-                TODAS_FERRAMENTAS = carregar_ferramentas_dinamicas()
-                TOOL_MAP = {func.__name__: func for func in TODAS_FERRAMENTAS}
-                
-                # Preserva histórico e recria sessão
-                historico_atual = []
-                try:
-                    # Tenta recuperar o histórico (compatibilidade varia entre versões do SDK)
-                    if hasattr(chat, 'history'):
-                        historico_atual = chat.history
-                    elif hasattr(chat, '_curated_history'):
-                        historico_atual = chat._curated_history
-                except Exception as e:
-                    print(f"⚠️ Não foi possível preservar o histórico: {e}")
+            if msg.lstrip().startswith("/"):
+                if SLASH_ROUTE in {"gemini", "codex"}:
+                    route = SLASH_ROUTE
+                if route == "codex":
+                    result = executar_codex_cli_raw(
+                        prompt=msg,
+                        sandbox=CODEX_SANDBOX,
+                        timeout_segundos=CODEX_TIMEOUT,
+                        modelo=CODEX_MODEL
+                    )
+                else:
+                    result = gemini_cli_raw(msg)
+            else:
+                if route == "codex":
+                    context = _build_context(history, summary_text)
+                    result = executar_codex_cli(
+                        tarefa=msg,
+                        contexto=context,
+                        sandbox=CODEX_SANDBOX,
+                        timeout_segundos=CODEX_TIMEOUT,
+                        modelo=CODEX_MODEL
+                    )
+                else:
+                    prompt = _build_gemini_prompt(msg, history, summary_text)
+                    result = gemini_cli_raw(prompt)
 
-                chat = iniciar_sessao_chat(TODAS_FERRAMENTAS, history=historico_atual)
-                print("🚀 Sistema atualizado com sucesso. Próxima interação terá novas skills.")
+            print(f"BOT ({route}): {result}")
+
+            history.append({"role": "user", "content": _trim_text(msg, HISTORY_MAX_CHARS)})
+            if route == "codex":
+                assistant_text = _extract_codex_final(result)
+            else:
+                assistant_text = result
+            history.append({"role": "assistant", "content": _trim_text(assistant_text, HISTORY_MAX_CHARS)})
+            history, summary_text = _rollup_history(history, summary_text)
 
         except KeyboardInterrupt:
             break
         except EOFError:
             break
         except Exception as e:
-            print(f"⚠️ ERRO: {e}")
+            print(f"ERRO: {e}")

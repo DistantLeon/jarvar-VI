@@ -1,7 +1,0 @@
-Verifique se tenho preferencias salvas na memoria sobre o projeto.
-Pesquise 'Python 3.13 features' e me diga a principal.
-Acesse 'https://example.com' e me diga o titulo da pagina.
-Converta a imagem 'tests/run_001/dummy.png' para JPG.
-Crie uma skill chamada 'multi_agent_ping' que executa o comando 'gemini --version' no terminal e retorna o output. Quero testar se consigo invocar outro CLI.
-Use a skill multi_agent_ping e me mostre a versao.
-sair

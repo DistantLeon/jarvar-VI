@@ -1,8 +1,18 @@
+import os
 import subprocess
 
-def multi_agent_ping():
+def multi_agent_ping() -> str:
+    """Returns Gemini CLI version."""
     try:
-        result = subprocess.run(['gemini', '--version'], capture_output=True, text=True, check=True)
+        command = ['gemini']
+        if os.name == 'nt':
+            command = ['gemini.cmd']
+        result = subprocess.run(
+            command + ['--version'],
+            capture_output=True,
+            text=True,
+            check=True
+        )
         return result.stdout
     except subprocess.CalledProcessError as e:
         return f"Error: {e}"

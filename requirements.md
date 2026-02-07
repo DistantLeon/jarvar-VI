@@ -1,35 +1,43 @@
-# Project Requirements
+﻿# Project Requirements (Jarvis 4.0)
 
 ## Core Dependencies (Jarvis System)
-Essas bibliotecas são essenciais para o funcionamento do orquestrador `jarvis.py` (v3.7+).
-
+Bibliotecas essenciais para o orquestrador `jarvis.py`.
 - **Python 3.12+**
-- **google-genai**: SDK para comunicação com o modelo Gemini 2.0 Flash.
+- **google-genai**: SDK para comunicacao com o modelo Gemini.
 - **python-dotenv**: Carregamento de credenciais (`.env`).
-- **pydantic**: Validação de dados (usado internamente pelo SDK).
+- **pydantic**: Validacao de dados e schemas.
 
-## Web Arm Dependencies (Navegação) [NOVO]
-Essenciais para a funcionalidade de navegação e leitura de páginas web (`skills/navegacao.py`).
+## Brain / Executor CLIs (System)
+Ferramentas de CLI que precisam estar no PATH do sistema:
+- **gemini**: CLI do Brain (orquestrador via subprocess).
+- **codex**: CLI do Executor (delegacao via `codex exec`).
 
-- **crawl4ai**: Framework de crawling assíncrono que converte HTML/JS em Markdown limpo.
-- **playwright**: Motor de automação de browser (usado pelo crawl4ai).
-  *Nota:* Requer instalação de binários do sistema: `playwright install chromium`.
+## Web Arm Dependencies (Navegacao)
+- **crawl4ai**: Crawling assincrono (Playwright).
+- **playwright**: Motor de automacao do browser.
+  - Requer: `playwright install chromium`
+- **requests** + **beautifulsoup4**: Fallback HTTP quando Playwright falha.
 
-## Dynamic Skills Dependencies
-O sistema de skills nativo utiliza bibliotecas padrão do Python, mas skills criadas podem requerer pacotes extras.
+## Media
+- **yt-dlp**: Transcricao e metadata de video.
+- **Pillow**: Conversao e redimensionamento de imagens.
 
-- **importlib**: (Stdlib) Carregamento dinâmico.
-- **inspect**: (Stdlib) Introspecção de código.
+## Optional / Infra
+- **fastapi**, **uvicorn**: Somente se voce for expor o Jarvis como API.
+- **pytest**: Testes locais.
+
+## Install
+```bash
+pip install -r requirements.txt
+playwright install chromium
+```
 
 ## Environment Setup
-1. Crie o arquivo `.env`:
-   ```env
-   GEMINI_API_KEY=sua_chave_aqui
-   ```
-2. Instale as dependências:
-   ```bash
-   pip install -r requirements.txt
-   playwright install chromium
-   ```
-3. Verifique o Gemini CLI:
-   Certifique-se de que o comando `gemini` está acessível no PATH para funcionamento do Brain.
+Crie o arquivo `.env`:
+```env
+GEMINI_API_KEY=sua_chave_aqui
+```
+
+## Notes
+- O Brain utiliza o Gemini CLI via subprocess, nao substituir por SDK.
+- O Codex roda em sessoes novas por chamada (`codex exec`).

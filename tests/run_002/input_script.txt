@@ -1,3 +1,0 @@
-Crie uma skill chamada 'echo_cli' que recebe um texto e usa 'gemini -p <texto> ola' para retornar um eco. Quero testar a integracao.
-Use a skill echo_cli com o texto 'Teste de Echo' e me mostre o resultado.
-sair
