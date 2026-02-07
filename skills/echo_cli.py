@@ -1,9 +1,22 @@
+import os
+import subprocess
 
 def echo_cli(texto: str) -> dict:
-    """Ecoes via CLI Gemini."""
-    import subprocess
+    """Echos texto via gemini CLI."""
     try:
-        resultado = subprocess.run(['gemini', '-p', texto, 'ola'], capture_output=True, text=True, check=True)
-        return {'output': resultado.stdout, 'error': resultado.stderr}
+        command = ['gemini']
+        if os.name == 'nt':
+            command = ['gemini.cmd']
+        prompt = f"{texto} ola"
+        resultado = subprocess.run(
+            command + ['-p', prompt],
+            capture_output=True,
+            text=True
+        )
+        return {
+            'exit_code': resultado.returncode,
+            'output': resultado.stdout,
+            'error': resultado.stderr
+        }
     except subprocess.CalledProcessError as e:
         return {'error': str(e)}

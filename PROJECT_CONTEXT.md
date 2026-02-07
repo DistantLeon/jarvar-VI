@@ -1,71 +1,67 @@
-# PROJECT CONTEXT: JARVIS ECOSYSTEM (V3.9.1)
-**Date:** 2026-02-03 | **Architecture:** Orchestrator (Hand) + Intelligence (Brain-CLI) + Dynamic Skills (Meta) + Web Arm + Media Suite + Persistent Memory
+# PROJECT CONTEXT: JARVIS ECOSYSTEM (V0.4.1)
+**Date:** 2026-02-07 | **Architecture:** Router (Hand) + Brain-CLI (Gemini) + Executor-CLI (Codex) + Infra Skills + Persistent Memory
 
 ## 1. Overview
-O projeto evoluiu para uma arquitetura de **Fábrica de Software Autônoma com Capacidade de Auto-Expansão, Navegação Web, Processamento Multimídia e Memória Persistente**.
-- **Jarvis (Hand):** Script Python (`jarvis.py`) que atua como **Orquestrador Síncrono com Hot Reload**.
-- **Gemini CLI (Brain):** Motor de raciocínio profundo (Brain) executado via subprocesso isolado.
-- **Dynamic Skills:** Sistema que permite ao Jarvis criar, salvar e carregar novas ferramentas Python em tempo de execução sem reiniciar o processo.
-- **Web Arm:** Capacidade headless de navegar, renderizar JS e ler a web.
-- **Persistent Memory (Dossier):** Sistema de arquivos Markdown para retenção de longo prazo (preferências, contexto de projeto).
+O projeto evoluiu para uma arquitetura onde **os CLIs sao a fonte primaria de tools**.
+As skills locais ficam apenas para infraestrutura (IO, memoria, bridges).
+- **Jarvis (Hand/Router):** Script Python (`jarvis.py`) que atua como **roteador automatico**.
+- **Gemini CLI (Brain):** Motor de raciocinio profundo, executado via subprocesso isolado.
+- **Codex CLI (Executor):** Executor especializado para tarefas de codigo e automacao.
+- **Infra Skills:** Apenas ferramentas essenciais (sistema, memoria, cerebro, codex_cli).
+- **Persistent Memory (Dossier):** Arquivos Markdown para retencao de longo prazo.
 
 ## 2. Directory Structure
 - `/`: Raiz do projeto.
-- `/jarvis_logs/`: Auditoria completa do Brain (Inputs/Outputs).
-- `/memoria/`: [NOVO] Armazenamento de conhecimento persistente (Arquivos .md).
-- `/skills/`: Repositório de ferramentas dinâmicas (Navegação, Memória, etc).
-- `/web_arm_tests/`: Testes automatizados da capacidade de navegação.
+- `/jarvis_logs/`: Auditoria completa do Brain e do Codex (inputs/outputs).
+- `/memoria/`: Armazenamento de conhecimento persistente (arquivos .md).
+- `/skills/`: Repositorio de ferramentas dinamicas (infra only por allowlist).
+- `/tests/`: Scripts de testes e cenarios de execucao.
 - `/venv/`: Ambiente virtual Python.
 
 ## 3. Core Components
-- `jarvis.py` (v3.9.1):
-    - **Hot Reloading:** Detecta criação de novas skills e recarrega a "memória" de funções do modelo preservando o histórico do chat.
-    - **Short-Circuit Execution:** Intercepta comandos JSON retornados pelo Brain e os executa imediatamente na mesma iteração, eliminando alucinações da Hand.
-    - **Meta-Tool (`criar_skill`):** Permite que o Jarvis escreva código Python para expandir suas próprias capacidades.
-    - **Dynamic Loader:** Importa módulos da pasta `/skills` automaticamente via `importlib` com resolução de nomes robusta (`skills.modulo`).
+- `jarvis.py` (v0.4.1):
+  - **Router:** Decide automaticamente entre Gemini (pensar) e Codex (executar).
+  - **Pass-through `/`:** Comandos iniciados por `/` sao repassados ao CLI escolhido.
+  - **Skills Allowlist:** Carrega apenas `sistema`, `memoria`, `cerebro`, `codex_cli`.
+  - **History + Summary:** Mantem contexto da sessao e injeta nos prompts.
 
-- `skills/cerebro.py` (The Bridge):
-    - **Architecture:** Executa o `gemini` CLI via `subprocess` nativo.
-    - **Protocol:** Envia contexto via STDIN (evitando limites de shell e problemas de encoding).
-    - **CRITICAL:** A separação via CLI é vital para a arquitetura multi-agente. **NÃO SUBSTITUIR POR SDK.**
-    - **Logs:** Auditoria completa em `jarvis_logs/` antes e depois do processamento.
+- `skills/cerebro.py` (Brain Bridge):
+  - **Architecture:** Executa o `gemini` CLI via `subprocess` nativo.
+  - **Functions:** `gemini_cli_raw` (pass-through) e `iniciar_raciocinio` (legado JSON).
+  - **CRITICAL:** A separacao via CLI e vital. **Nao substituir por SDK.**
 
-- `skills/schemas.py` (Guardrails):
-    - **Lib:** `pydantic`.
-    - **Função:** Define a estrutura rígida `BrainCommand` (tool + args).
-    - **Parser:** `extract_json_from_text` garante que apenas JSONs válidos acionem ferramentas.
-
-- `skills/navegacao.py` (Web Arm):
-    - **Lib:** `crawl4ai` (Baseada em Playwright).
-    - **Função:** `navegar_web(url, tipo_extracao)`.
+- `skills/codex_cli.py` (Executor Bridge):
+  - **Purpose:** Ponte para o Codex CLI (`codex exec`).
+  - **Functions:** `executar_codex_cli` (com preambulo) e `executar_codex_cli_raw` (pass-through).
+  - **Logs:** Entrada e saida salvas em `jarvis_logs/`.
 
 - `skills/memoria.py` (Dossier):
-    - **Funções:** `memorizar(conteudo, topico)`, `consultar_memoria(topico)`.
+  - **Funcoes:** `memorizar`, `consultar_memoria`, `listar_topicos`.
+
+- `skills/sistema.py` (Infra):
+  - **Funcoes:** `ler_arquivo`, `escrever_arquivo`, `executar_comando_terminal`, `listar_estrutura_projeto`, `criar_skill`.
 
 ## 4. Protocols & Standards
-- **Meta-Programming Protocol:**
-    - Se o Brain identificar uma tarefa repetitiva ou complexa que falta no arsenal, ele deve instruir a criação de uma Skill.
-- **Brain-Hand Protocol:**
-    - Brain pensa -> JSON Estruturado (` ```json ... ``` `) -> Hand valida (Pydantic) -> Executa (Short-Circuit).
+- **Router Protocol:**
+  - Roteamento automatico com heuristicas (e opcional LLM via `ROUTER_MODE=hybrid|llm`).
+  - Gemini = pensamento/contexto longo. Codex = execucao/codigo.
+- **CLI Tools First:**
+  - As tools built-in dos CLIs sao a referencia primaria.
+  - Skills locais ficam restritas a infraestrutura.
 - **Security Protocol:**
-    - **Non-Root Execution:** Container roda com usuário `jarvis` (UID 1000).
-    - **Input Sanitization:** JSONs são validados antes da execução.
-    - **Sandboxing:** `validate_path` impede acesso fora da raiz.
+  - **Non-Root Execution:** Container roda com usuario `jarvis` (UID 1000).
+  - **Sandboxing:** `validate_path` impede acesso fora da raiz.
 
 ## 5. Data Flow (The Loop)
-1. **User Input** -> Jarvis (Hand).
-2. **Hand** -> Repassa para `iniciar_raciocinio` (Brain) via CLI Subprocess.
-3. **Brain** -> Retorna estratégia ou comando JSON.
-4. **Hand** -> 
-    - Se JSON: Executa ferramenta imediatamente (Short-Circuit) e anexa resultado.
-    - Se Texto: Exibe ao usuário.
+1. **User Input** -> Jarvis Router.
+2. **Router** -> Decide Gemini CLI ou Codex CLI.
+3. **CLI** -> Responde diretamente (texto/tools nativas).
+4. **Jarvis** -> Exibe resposta e atualiza contexto local.
 
 ## 6. Dependencies
-- **Core:** `pydantic`, `python-dotenv`, `google-genai` (apenas p/ Hand), `gemini-cli` (Sistema).
-- **Web Arm:** `crawl4ai`, `playwright` (Requires `playwright install chromium`).
-- **Media:** `yt-dlp` (Video), `Pillow` (Image).
+- **Core:** `python-dotenv`, `pydantic`.
 - **Runtime:** Python 3.12+.
+- **CLIs (System):** `gemini` CLI, `codex` CLI.
 
 ## 7. Security
-- **Docker:** Usuário `jarvis` configurado. Volumes montados com permissões ajustadas.
-- **Web:** `navegar_web` roda em contexto seguro (Chromium sandbox).
+- **Docker:** Usuario `jarvis` configurado. Volumes montados com permissoes ajustadas.

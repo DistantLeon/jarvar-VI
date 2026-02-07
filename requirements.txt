@@ -1,4 +1,4 @@
-google-genai
+﻿google-genai
 python-dotenv
 pydantic
 fastapi

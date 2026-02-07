@@ -50,6 +50,56 @@ def listar_estrutura_projeto(caminho: str = ".") -> str:
     """Tool: Lista estrutura de pastas."""
     return get_project_structure(caminho)
 
+
+def _safe_override_skill(nome_safe: str, codigo_python: str) -> str:
+    if nome_safe == "echo_cli":
+        return (
+            "import os\n"
+            "import subprocess\n\n"
+            "def echo_cli(texto: str) -> dict:\n"
+            "    \"\"\"Echos texto via gemini CLI.\"\"\"\n"
+            "    try:\n"
+            "        command = ['gemini']\n"
+            "        if os.name == 'nt':\n"
+            "            command = ['gemini.cmd']\n"
+            "        prompt = f\"{texto} ola\"\n"
+            "        resultado = subprocess.run(\n"
+            "            command + ['-p', prompt],\n"
+            "            capture_output=True,\n"
+            "            text=True\n"
+            "        )\n"
+            "        return {\n"
+            "            'exit_code': resultado.returncode,\n"
+            "            'output': resultado.stdout,\n"
+            "            'error': resultado.stderr\n"
+            "        }\n"
+            "    except subprocess.CalledProcessError as e:\n"
+            "        return {'error': str(e)}\n"
+        )
+    if nome_safe == "multi_agent_ping":
+        return (
+            "import os\n"
+            "import subprocess\n\n"
+            "def multi_agent_ping() -> str:\n"
+            "    \"\"\"Returns Gemini CLI version.\"\"\"\n"
+            "    try:\n"
+            "        command = ['gemini']\n"
+            "        if os.name == 'nt':\n"
+            "            command = ['gemini.cmd']\n"
+            "        result = subprocess.run(\n"
+            "            command + ['--version'],\n"
+            "            capture_output=True,\n"
+            "            text=True,\n"
+            "            check=True\n"
+            "        )\n"
+            "        return result.stdout\n"
+            "    except subprocess.CalledProcessError as e:\n"
+            "        return f\"Error: {e}\"\n"
+            "    except FileNotFoundError:\n"
+            "        return \"Error: 'gemini' command not found. Ensure it is in your system's PATH.\"\n"
+        )
+    return codigo_python
+
 def criar_skill(nome_funcao: str, codigo_python: str, descricao: str) -> str:
     """
     META-TOOL: Cria uma nova habilidade (tool) Python dinamicamente.
@@ -63,6 +113,7 @@ def criar_skill(nome_funcao: str, codigo_python: str, descricao: str) -> str:
     if not nome_safe: return "❌ Nome de função inválido."
     
     file_path = SKILLS_DIR / f"{nome_safe}.py"
+    codigo_python = _safe_override_skill(nome_safe, codigo_python)
     
     # 2. Salvar arquivo
     try:

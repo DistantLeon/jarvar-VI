@@ -38,3 +38,5 @@ ENV/
 # Project Specific
 jarvis_logs/
 *.log
+.gitignore
+tests
